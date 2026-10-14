@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Marwan M. Mahrous — Software Engineer</title>
+<meta name="description" id="metaDesc" content="">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230A0B0D'/%3E%3Crect x='6' y='6' width='9' height='12' fill='%23C7F542'/%3E%3C/svg%3E">
+
+<script>
+/* set language before first paint to avoid wrong-direction flash */
+try{
+  var l = localStorage.getItem('mmm-lang');
+  if(!l && (navigator.language||'').indexOf('ar') === 0) l = 'ar';
+  if(l === 'ar'){ document.documentElement.lang = 'ar'; document.documentElement.dir = 'rtl'; }
+}catch(e){}
+</script>
+
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Cairo:wght@600;700&family=IBM+Plex+Sans+Arabic:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- boot preloader -->
+<div class="boot" id="preloader"><div class="boot-box" id="bootLines"></div></div>
+
+<!-- header -->
+<header class="site-header" id="siteHeader">
+  <a href="#top" class="logo">marwan.dev<span class="caret"></span></a>
+  <nav class="nav">
+    <a href="#work"><i>01</i><span data-i18n="navWork">work</span></a>
+    <a href="#about"><i>02</i><span data-i18n="navAbout">about</span></a>
+    <a href="#capabilities"><i>03</i><span data-i18n="navCap">capabilities</span></a>
+    <a href="#contact"><i>04</i><span data-i18n="navContact">contact</span></a>
+  </nav>
+  <div class="h-right">
+    <button class="lang-b" data-lang-btn>عربي</button>
+    <button class="burger" id="burger" aria-label="Menu" aria-expanded="false"><span></span><span></span></button>
+  </div>
+</header>
+
+<!-- mobile menu -->
+<div class="mmenu" id="mmenu">
+  <nav class="mmenu-nav">
+    <a class="mm-link" href="#work"><span class="mono">01</span><span data-i18n="navWork">work</span></a>
+    <a class="mm-link" href="#about"><span class="mono">02</span><span data-i18n="navAbout">about</span></a>
+    <a class="mm-link" href="#capabilities"><span class="mono">03</span><span data-i18n="navCap">capabilities</span></a>
+    <a class="mm-link" href="#contact"><span class="mono">04</span><span data-i18n="navContact">contact</span></a>
+  </nav>
+  <div class="mmenu-foot">
+    <a class="mono" href="mailto:hello@marwanmahrous.dev" dir="ltr">hello@marwanmahrous.dev</a>
+    <div style="display:flex;gap:1.4rem;flex-wrap:wrap;align-items:center">
+      <a class="mono" href="https://github.com/marwanmahrous" target="_blank" rel="noopener">GitHub</a>
+      <a class="mono" href="https://www.linkedin.com/in/marwanmahrous" target="_blank" rel="noopener">LinkedIn</a>
+      <a class="mono" href="https://x.com/marwanmahrous" target="_blank" rel="noopener">X</a>
+      <button class="lang-b mono" data-lang-btn>عربي</button>
+    </div>
+  </div>
+</div>
+
+<main>
+  <!-- HERO -->
+  <section class="hero wrap" id="top">
+    <div class="hero-top mono">
+      <span data-i18n="heroTopLeft">// marwan m. mahrous — software engineer</span>
+      <span class="typed-line"><span id="typedPrefix"></span><span id="typedText"></span><span class="tcaret"></span></span>
+    </div>
+
+    <h1 class="name" id="heroName"></h1>
+
+    <div class="hero-bottom">
+      <div>
+        <p class="hero-desc" data-i18n="heroDesc"></p>
+        <div class="hero-ctas">
+          <a class="btn btn-acc" href="#work"><span data-i18n="heroCta">view work</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+          <a class="btn btn-ghost" href="#contact"><span data-i18n="heroCta2">get in touch</span></a>
+        </div>
+      </div>
+      <div class="info-table" id="infoTable"></div>
+    </div>
+  </section>
+
+  <!-- STACK MARQUEE -->
+  <div class="marquee" dir="ltr" aria-hidden="true">
+    <div class="mq-track" id="mqTrack"></div>
+  </div>
+
+  <!-- WORK -->
+  <section class="section wrap" id="work">
+    <div class="sec-head mono">
+      <span class="sec-path" data-reveal><b>+</b><span data-i18n="workPath">~/work</span></span>
+      <span data-reveal id="workCount" data-i18n="workRight">05 projects — 2022/2025</span>
+    </div>
+    <h2 class="sec-title" data-reveal data-i18n-html="workTitleHtml">selected <span class="o">work</span></h2>
+    <div class="work-grid" id="workGrid"></div>
+  </section>
+
+  <!-- ABOUT -->
+  <section class="section wrap" id="about">
+    <div class="sec-head mono">
+      <span class="sec-path" data-reveal><b>+</b><span data-i18n="aboutPath">~/about</span></span>
+      <span data-reveal data-i18n="aboutRight">Alexandria — remote friendly</span>
+    </div>
+    <h2 class="sec-title" data-reveal data-i18n-html="aboutTitleHtml">the short <span class="o">version</span></h2>
+    <p class="manifesto" id="manifesto"></p>
+    <div class="about-grid">
+      <div data-reveal>
+        <p class="klabel" data-i18n="workLabel">// how i work</p>
+        <p class="copy" data-i18n="aboutP1"></p>
+        <p class="copy" data-i18n="aboutP2"></p>
+      </div>
+      <div data-reveal>
+        <p class="klabel" data-i18n="eduLabel">// education &amp; highlights</p>
+        <div id="eduList"></div>
+        <div class="now-box"><span class="dot"></span><span data-i18n="nowText"></span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- CAPABILITIES -->
+  <section class="section wrap" id="capabilities">
+    <div class="sec-head mono">
+      <span class="sec-path" data-reveal><b>+</b><span data-i18n="capPath">~/capabilities</span></span>
+      <span data-reveal data-i18n="capRight">04 disciplines</span>
+    </div>
+    <h2 class="sec-title" data-reveal data-i18n-html="capTitleHtml">what i <span class="o">ship</span></h2>
+    <div id="servicesAcc" data-reveal></div>
+  </section>
+
+  <!-- CONTACT -->
+  <footer class="section wrap" id="contact">
+    <div class="sec-head mono">
+      <span class="sec-path" data-reveal><b>+</b><span data-i18n="contactPath">~/contact</span></span>
+      <span data-reveal data-i18n="contactRight">open to work — 2025</span>
+    </div>
+    <h2 class="sec-title" data-reveal data-i18n-html="contactTitleHtml">let&rsquo;s build <span class="o">together</span></h2>
+
+    <div class="mail-row" data-reveal>
+      <a class="mail-link" href="mailto:hello@marwanmahrous.dev" dir="ltr">hello@marwanmahrous.dev
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
+      </a>
+      <button class="copy-btn" id="copyEmail" aria-label="Copy email">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg>
+      </button>
+    </div>
+
+    <div class="f-grid">
+      <div class="f-col" data-reveal>
+        <p class="klabel" data-i18n="socLabel">// elsewhere</p>
+        <a class="f-link" href="https://github.com/marwanmahrous" target="_blank" rel="noopener">GitHub<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        <a class="f-link" href="https://www.linkedin.com/in/marwanmahrous" target="_blank" rel="noopener">LinkedIn<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+        <a class="f-link" href="https://x.com/marwanmahrous" target="_blank" rel="noopener">X<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
+      </div>
+      <div class="f-col" data-reveal>
+        <p class="klabel" data-i18n="mapLabel">// index</p>
+        <a class="f-link" href="#work" data-i18n="navWork">work</a>
+        <a class="f-link" href="#about" data-i18n="navAbout">about</a>
+        <a class="f-link" href="#capabilities" data-i18n="navCap">capabilities</a>
+      </div>
+      <div class="f-col" data-reveal>
+        <p class="klabel" data-i18n="infoLabel">// info</p>
+        <p class="copy small" data-i18n="based"></p>
+        <p class="dim-line"><span data-i18n="timeLabel">local time</span> — <span class="js-clock">CAI --:--:--</span></p>
+      </div>
+    </div>
+
+    <div class="f-bottom">
+      <span data-i18n="copyright">© 2025 marwan m. mahrous</span>
+      <span data-i18n="credit">designed &amp; coded by me</span>
+      <button id="toTop"><span data-i18n="top">top</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg>
+      </button>
+    </div>
+  </footer>
+</main>
+
+<!-- PROJECT MODAL -->
+<div class="modal" id="modal" role="dialog" aria-modal="true" aria-hidden="true">
+  <div class="m-backdrop" id="mBackdrop"></div>
+  <div class="m-win">
+    <div class="m-top">
+      <span id="mPath">~/work/</span>
+      <button class="m-close" id="mClose"><span data-i18n="close">close</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+      </button>
+    </div>
+    <div class="m-scroll" id="mScroll" data-lenis-prevent>
+      <div class="m-body">
+        <p class="m-cat" id="mCat"></p>
+        <h3 id="mTitle"></h3>
+        <div class="m-meta">
+          <div class="m-cell"><span class="k" data-i18n="mType">type</span><span class="v" id="mType"></span></div>
+          <div class="m-cell"><span class="k" data-i18n="mYear">year</span><span class="v" id="mYear"></span></div>
+          <div class="m-cell"><span class="k" data-i18n="mRole">role</span><span class="v" id="mRole"></span></div>
+          <div class="m-cell"><span class="k" data-i18n="mStack">stack</span><span class="v" id="mStack"></span></div>
+        </div>
+        <figure><img id="mImg1" src="" alt=""></figure>
+        <div class="m-cols"><p id="mP1"></p><p id="mP2"></p></div>
+        <figure><img id="mImg2" src="" alt="" loading="lazy"></figure>
+      </div>
+      <button class="m-next" id="mNext">
+        <span class="mono" data-i18n="mNext">next project</span>
+        <strong id="mNextName"></strong>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- status bar -->
+<div class="status" id="status">
+  <button id="stHome">~/mahrous</button>
+  <span class="st-prog" id="stProg">0%</span>
+  <div class="st-right">
+    <span class="st-avail"><span class="dot"></span><span data-i18n="avail">open to work</span></span>
+    <button class="lang-b" data-lang-btn>عربي</button>
+    <span class="js-clock">CAI --:--:--</span>
+  </div>
+</div>
+
+<div class="toast mono" id="toast" role="status"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/ScrollTrigger.min.js"></script>
+<script src="https://unpkg.com/lenis@1.1.14/dist/lenis.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="data.js" defer></script>
+<script src="app.js" defer></script>
+<script src="admin.js" defer></script>
+</body>
+</html>
