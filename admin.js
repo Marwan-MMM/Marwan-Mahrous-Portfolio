@@ -43,9 +43,12 @@
         </div>
       </div>
       <div class="a-list" id="aList"></div>
-      <div class="a-foot">
+            <div class="a-foot">
         <span>live — connected to supabase. changes are public immediately.</span>
-        <span>services / texts: edit js/data.js</span>
+        <span style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+          <button class="a-btn" id="aExit">exit panel</button>
+          <span>services / texts: edit js/data.js</span>
+        </span>
       </div>
     </div>
 
