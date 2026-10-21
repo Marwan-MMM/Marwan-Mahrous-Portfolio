@@ -16,7 +16,7 @@ const CONFIGURED = !!(window.supabase && cfg.url && cfg.anonKey &&
 const BUCKET = 'media';
 let sb = null, user = null;
 let projects = [], editingId = null, armedDelete = null, armedTimer = null;
-let uploadSlot = null, pvFellBack = false, toastTimer;
+let uploadSlot = null, pvFellBack = false, toastTimer, gallery = [];
 
 /* ---------- helpers ---------- */
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
@@ -25,11 +25,31 @@ const slugify = s => String(s).toLowerCase().trim()
   .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
 const pic = (seed, w, h) => `https://picsum.photos/seed/${seed}/${w}/${h}.jpg`;
 
-const rowToProject = r => ({
-  id: r.id, title: r.title, titleAr: r.title_ar || '', year: r.year || '',
-  seed: r.seed || r.id, img: r.img || '', img2: r.img2 || '',
-  hidden: !!r.hidden, sort_order: r.sort_order || 0, en: r.en || {}, ar: r.ar || {}
-});
+const rowToProject = r => {
+  const images = (Array.isArray(r.images) ? r.images : []).filter(x => x && x.url)
+    .map(x => ({ url: x.url, caption: x.caption || '' }));
+  const seen = new Set(images.map(x => x.url));
+  [r.img, r.img2].forEach(u => {
+    if (u && !seen.has(u)){ images.push({ url: u, caption: '' }); seen.add(u); }
+  });
+  return {
+    id: r.id, title: r.title, titleAr: r.title_ar || '', year: r.year || '',
+    seed: r.seed || r.id, img: r.img || '', img2: r.img2 || '',
+    live_url: r.live_url || '', images,
+    hidden: !!r.hidden, sort_order: r.sort_order || 0, en: r.en || {}, ar: r.ar || {}
+  };
+};
+const projectToRow = (p, sortOrder) => {
+  const images = (Array.isArray(p.images) ? p.images : []).filter(x => x && x.url)
+    .map(x => ({ url: x.url, caption: x.caption || '' }));
+  return {
+    id: p.id, title: p.title, title_ar: p.titleAr || '', year: String(p.year || ''),
+    seed: p.seed || p.id,
+    img: images[0] ? images[0].url : '', img2: images[1] ? images[1].url : '',
+    live_url: p.live_url || '', images,
+    hidden: !!p.hidden, sort_order: sortOrder || 0, en: p.en || {}, ar: p.ar || {}
+  };
+};
 const projectToRow = (p, sortOrder) => ({
   id: p.id, title: p.title, title_ar: p.titleAr || '', year: String(p.year || ''),
   seed: p.seed || p.id, img: p.img || '', img2: p.img2 || '',
@@ -200,8 +220,8 @@ function collectForm(){
     titleAr: $('e_titleAr').value.trim(),
     year: $('e_year').value.trim(),
     seed: $('e_seed').value.trim(),
-    img: $('e_img').value.trim(),
-    img2: $('e_img2').value.trim(),
+    live_url: $('e_live').value.trim(),
+    images: gallery.map(x => ({ url: x.url, caption: x.caption || '' })),
     hidden: editingId ? ((projects.find(x => x.id === editingId) || {}).hidden || false) : false,
     en: grabFields('e_en_'),
     ar: grabFields('e_ar_')
@@ -215,10 +235,11 @@ function openEditor(p){
   const v = (id, val) => { $(id).value = val || ''; };
   v('e_id', p && p.id); v('e_title', p && p.title); v('e_titleAr', p && p.titleAr);
   v('e_year', p ? p.year : String(new Date().getFullYear()));
-  v('e_seed', p && p.seed); v('e_img', p && p.img); v('e_img2', p && p.img2);
+  v('e_seed', p && p.seed); v('e_live', p && p.live_url);
   const en = (p && p.en) || {}, ar = (p && p.ar) || {};
   ['cat','type','role','stack','short','p1','p2'].forEach(k => { v('e_en_' + k, en[k]); v('e_ar_' + k, ar[k]); });
-  updateThumb('img'); updateThumb('img2');
+  gallery = ((p && p.images) || []).map(x => ({ url: x.url, caption: x.caption || '' }));
+  renderGallery();
   updatePreview();
 }
 function closeEditor(){
@@ -226,9 +247,23 @@ function closeEditor(){
   $('edForm').hidden = true; $('edEmpty').hidden = false;
   renderList();
 }
-function updateThumb(slot){
-  const img = $('thumb_' + slot), val = $('e_' + slot).value.trim();
-  if (val){ img.src = val; img.hidden = false; } else { img.hidden = true; img.removeAttribute('src'); }
+function renderGallery(){
+  const grid = $('galGrid');
+  if (!gallery.length){
+    grid.innerHTML = '<p class="pempty" style="padding:1rem">no images yet — uploads will appear here</p>';
+    return;
+  }
+  grid.innerHTML = gallery.map((im, i) => `
+    <div class="gal-item">
+      <span class="idx">${String(i + 1).padStart(2, '0')}${i === 0 ? ' · cover' : ''}</span>
+      <a href="${esc(im.url)}" target="_blank" rel="noopener noreferrer"><img src="${esc(im.url)}" alt=""></a>
+      <input type="text" placeholder="caption (optional)" value="${esc(im.caption || '')}" data-cap="${i}">
+      <div class="bar">
+        <button type="button" class="btn" data-gal="up" data-i="${i}" ${i === 0 ? 'disabled' : ''}>↑</button>
+        <button type="button" class="btn" data-gal="down" data-i="${i}" ${i === gallery.length - 1 ? 'disabled' : ''}>↓</button>
+        <button type="button" class="btn btn-danger" data-gal="rm" data-i="${i}">remove</button>
+      </div>
+    </div>`).join('');
 }
 function updatePreview(){
   const p = collectForm();
@@ -237,7 +272,7 @@ function updatePreview(){
   $('pv_year').textContent = p.year || '';
   $('pv_title').textContent = p.title || '—';
   $('pv_short').textContent = p.en.short || '';
-  $('pv_img').src = p.img || pic(p.seed || p.id || 'mmm', 800, 450);
+  $('pv_img').src = (p.images[0] && p.images[0].url) || pic(p.seed || p.id || 'mmm', 800, 450);
   $('pv_chips').innerHTML = (p.en.stack || '').split('·')
     .map(s => s.trim()).filter(Boolean).map(c => `<span>${esc(c)}</span>`).join('');
 }
@@ -273,29 +308,53 @@ async function saveProject(){
 }
 
 /* ---------- uploads ---------- */
-qsa('[data-up]').forEach(btn => btn.addEventListener('click', () => {
-  if (needAuth()) return;
-  uploadSlot = btn.dataset.up;
-  $('imgFile').click();
-}));
+/* ---------- gallery uploads (unlimited, stored in Supabase Storage) ---------- */
+ $('galAdd').addEventListener('click', () => { if (!needAuth()) $('imgFile').click(); });
  $('imgFile').addEventListener('change', async e => {
-  const file = e.target.files[0];
+  const files = [...e.target.files];
   e.target.value = '';
-  if (!file || !uploadSlot || needAuth()) return;
-  if (!file.type.startsWith('image/')){ toast('pick an image file'); return; }
-  if (file.size > 8 * 1024 * 1024){ toast('image too large (max 8 MB)'); return; }
-  toast('uploading…');
-  try{
-    const base = slugify($('e_id').value) || 'untitled';
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const path = `projects/${base}-${uploadSlot}-${Date.now()}.${ext}`;
-    const { error } = await sb.storage.from(BUCKET).upload(path, file, { upsert: true, cacheControl: '3600' });
-    if (error) throw error;
-    const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
-    $('e_' + uploadSlot).value = data.publicUrl;
-    updateThumb(uploadSlot); updatePreview();
-    toast('image uploaded — url filled in');
-  }catch(err){ toast('upload failed: ' + (err.message || '')); }
+  if (!files.length || needAuth()) return;
+  const base = slugify($('e_id').value) || 'untitled';
+  let ok = 0;
+  for (let k = 0; k < files.length; k++){
+    const f = files[k];
+    if (!f.type.startsWith('image/')){ toast(`skipped ${f.name} — not an image`); continue; }
+    if (f.size > 8 * 1024 * 1024){ toast(`skipped ${f.name} — larger than 8 MB`); continue; }
+    $('galAdd').disabled = true; $('galAdd').textContent = `uploading ${k + 1}/${files.length}…`;
+    try{
+      const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `projects/${base}-${Date.now()}-${k}.${ext}`;
+      const { error } = await sb.storage.from(BUCKET).upload(path, f, { upsert: false, cacheControl: '3600' });
+      if (error) throw error;
+      const { data } = sb.storage.from(BUCKET).getPublicUrl(path);
+      gallery.push({ url: data.publicUrl, caption: '' });
+      ok++;
+      renderGallery(); updatePreview();
+    }catch(err){ toast(`upload failed (${f.name}): ${err.message || ''}`); }
+  }
+  $('galAdd').disabled = false; $('galAdd').textContent = '+ upload images';
+  if (ok) toast(`${ok} image${ok === 1 ? '' : 's'} added — press “save → live” to publish`);
+});
+ $('galGrid').addEventListener('click', e => {
+  const btn = e.target.closest('[data-gal]');
+  if (!btn) return;
+  const i = +btn.dataset.i;
+  if (btn.dataset.gal === 'up' && i > 0){
+    [gallery[i - 1], gallery[i]] = [gallery[i], gallery[i - 1]];
+    renderGallery(); updatePreview();
+  }
+  if (btn.dataset.gal === 'down' && i < gallery.length - 1){
+    [gallery[i + 1], gallery[i]] = [gallery[i], gallery[i + 1]];
+    renderGallery(); updatePreview();
+  }
+  if (btn.dataset.gal === 'rm'){
+    gallery.splice(i, 1);
+    renderGallery(); updatePreview();
+  }
+});
+ $('galGrid').addEventListener('input', e => {
+  const cap = e.target.closest('[data-cap]');
+  if (cap) gallery[+cap.dataset.cap].caption = cap.value;
 });
 
 /* ---------- backup / restore ---------- */

@@ -237,6 +237,7 @@
       MMM.showToast('id already used — pick another'); return;
     }
     const ar = grab('#f_ar_');
+    const cur = editingId ? S.projects.find(p => p.id === editingId) : null;
     const proj = {
       id, title,
       titleAr: $('f_titleAr').value.trim(),
@@ -244,14 +245,16 @@
       seed: $('f_seed').value.trim() || id,
       img:  $('f_img').value.trim(),
       img2: $('f_img2').value.trim(),
+      live_url: (cur && cur.live_url) || '',
       hidden: false,
       en: grab('#f_en_')
     };
     if (Object.keys(ar).length) proj.ar = ar;
+    /* keep the full gallery intact — the two fields here map to slots 0 and 1 */
+    proj.images = MMM.setGallerySlots(cur ? cur.images : [], proj.img, proj.img2);
 
     try {
       if (editingId) {
-        const cur = S.projects.find(p => p.id === editingId);
         proj.hidden = cur ? cur.hidden : false;
         const { error } = await MMM.sb.from('projects')
           .update(MMM.projectToRow(proj, cur ? cur.sort_order : 0))

@@ -43,20 +43,54 @@ function initSupabase(){
 }
 MMM.sb = initSupabase();
 
-/* row <-> project mappers (DB columns are snake_case) */
-MMM.rowToProject = r => ({
-  id: r.id, title: r.title, titleAr: r.title_ar || '',
-  year: r.year || '', seed: r.seed || r.id, img: r.img || '', img2: r.img2 || '',
-  hidden: !!r.hidden, sort_order: r.sort_order || 0,
-  en: r.en || {}, ar: r.ar || {}
-});
-MMM.projectToRow = (p, sortOrder) => ({
-  id: p.id, title: p.title, title_ar: p.titleAr || '',
-  year: String(p.year || ''), seed: p.seed || p.id,
-  img: p.img || '', img2: p.img2 || '',
-  hidden: !!p.hidden, sort_order: sortOrder || 0,
-  en: p.en || {}, ar: p.ar || {}
-});
+
+/* row <-> project mappers (DB columns are snake_case).
+   `images` is the canonical gallery: [{ url, caption }, ...] — unlimited.
+   img / img2 remain as derived columns: img = images[0], img2 = images[1].
+   Old rows that only have img/img2 are merged on read — no migration needed. */
+MMM.rowToProject = r => {
+  const images = (Array.isArray(r.images) ? r.images : []).filter(x => x && x.url)
+    .map(x => ({ url: x.url, caption: x.caption || '' }));
+  const seen = new Set(images.map(x => x.url));
+  [r.img, r.img2].forEach(u => {
+    if (u && !seen.has(u)){ images.push({ url: u, caption: '' }); seen.add(u); }
+  });
+  return {
+    id: r.id, title: r.title, titleAr: r.title_ar || '',
+    year: r.year || '', seed: r.seed || r.id, img: r.img || '', img2: r.img2 || '',
+    live_url: r.live_url || '', images,
+    hidden: !!r.hidden, sort_order: r.sort_order || 0,
+    en: r.en || {}, ar: r.ar || {}
+  };
+};
+MMM.projectToRow = (p, sortOrder) => {
+  const images = (Array.isArray(p.images) ? p.images : []).filter(x => x && x.url)
+    .map(x => ({ url: x.url, caption: x.caption || '' }));
+  return {
+    id: p.id, title: p.title, title_ar: p.titleAr || '',
+    year: String(p.year || ''), seed: p.seed || p.id,
+    img: images[0] ? images[0].url : '', img2: images[1] ? images[1].url : '',
+    live_url: p.live_url || '', images,
+    hidden: !!p.hidden, sort_order: sortOrder || 0,
+    en: p.en || {}, ar: p.ar || {}
+  };
+};
+/* The overlay admin's two URL fields ("cover" / "second") map to gallery
+   positions 0 and 1 without touching the rest of the gallery. */
+MMM.setGallerySlots = (images, img, img2) => {
+  const arr = (Array.isArray(images) ? images : []).map(x => ({ url: x.url, caption: x.caption || '' }));
+  const setSlot = (i, u) => {
+    if (u){
+      if (arr[i]) arr[i] = { url: u, caption: arr[i].caption };
+      else arr.splice(i, 0, { url: u, caption: '' });
+    }else if (arr[i]){
+      arr.splice(i, 1);
+    }
+  };
+  setSlot(0, (img || '').trim());
+  setSlot(1, (img2 || '').trim());
+  return arr;
+};
 
 /* ================= project data pipeline =================
    1. Supabase (live database — source of truth for everyone)
@@ -310,6 +344,7 @@ async function boot(){
 }
 
 /* ================= project modal ================= */
+const att = s => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 function fillModal(i){
   const p = MMM.state.view[i], d = projLoc(p), n = MMM.state.view.length;
   qs('#mPath').textContent = '~/work/' + p.id;
@@ -321,9 +356,21 @@ function fillModal(i){
   qs('#mStack').textContent = d.stack || '—';
   qs('#mP1').textContent = d.p1 || '';
   qs('#mP2').textContent = d.p2 || '';
-  const i1 = qs('#mImg1'), i2 = qs('#mImg2');
-  i1.src = p.img  || pic(p.seed || p.id, 1400, 800);        i1.alt = p.title;
-  i2.src = p.img2 || pic((p.seed || p.id) + '-b', 1400, 800); i2.alt = p.title + ' detail';
+  /* gallery — every image at its natural aspect ratio; nothing is cropped.
+     Projects with no gallery fall back to one seeded placeholder image. */
+  const shots = (p.images && p.images.length)
+    ? p.images
+    : [{ url: pic(p.seed || p.id, 1400, 900), caption: '' }];
+  qs('#mGallery').innerHTML = shots.map((im, k) => `
+    <figure class="m-shot">
+      <img src="${att(im.url)}" alt="${att(p.title + (im.caption ? ' — ' + im.caption : ''))}"
+           data-cap="${att(im.caption || '')}" ${k ? 'loading="lazy"' : ''}>
+      ${im.caption ? `<figcaption>${att(im.caption)}</figcaption>` : ''}
+    </figure>`).join('');
+  /* live demo — rendered only when the project actually has a URL */
+  const live = qs('#mLive');
+  if (p.live_url){ live.href = p.live_url; live.hidden = false; }
+  else { live.removeAttribute('href'); live.hidden = true; }
   const np = MMM.state.view[(i + 1) % n];
   qs('#mNextName').textContent = pTitle(np);
 }
@@ -362,6 +409,32 @@ qs('#mNext').addEventListener('click', () => {
     current = next; fillModal(next); qs('#mScroll').scrollTop = 0;
     gsap.to('#mScroll', { opacity: 1, duration: .3 });
   }});
+});
+
+/* ---------- full-image viewer (lightbox) ---------- */
+function openLightbox(src, cap, alt){
+  const lb = qs('#lightbox');
+  qs('#lbImg').src = src;
+  qs('#lbImg').alt = alt || '';
+  qs('#lbCap').textContent = cap || '';
+  lb.classList.add('open');
+  lb.setAttribute('aria-hidden', 'false');
+  MMM.lockScroll(true);
+}
+function closeLightbox(){
+  const lb = qs('#lightbox');
+  lb.classList.remove('open');
+  lb.setAttribute('aria-hidden', 'true');
+  MMM.lockScroll(false);
+}
+qs('#mGallery').addEventListener('click', e => {
+  const img = e.target.closest('img');
+  if (!img) return;
+  openLightbox(img.getAttribute('src'), img.dataset.cap || '', img.alt);
+});
+qs('#lbClose').addEventListener('click', closeLightbox);
+qs('#lightbox').addEventListener('click', e => {
+  if (!e.target.closest('figure')) closeLightbox();
 });
 
 /* ================= mobile menu ================= */
@@ -454,6 +527,7 @@ MMM.reloadProjects = async () => { await loadProjects(); MMM.rerenderProjects();
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (MMM.admin && MMM.admin.isOpen) return; // admin.js handles it
+  if (qs('#lightbox').classList.contains('open')) { closeLightbox(); return; }
   if (modalOpen) closeModal();
   else if (menuOpen) toggleMenu(false);
 });

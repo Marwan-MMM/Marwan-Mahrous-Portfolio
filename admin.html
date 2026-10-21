@@ -100,15 +100,16 @@
           <label class="field"><span>year</span><input id="e_year" placeholder="2025"></label>
           <label class="field full"><span>title (english) *</span><input id="e_title"></label>
           <label class="field full" dir="rtl"><span>العنوان (arabic — اختياري)</span><input id="e_titleAr" dir="rtl"></label>
-          <label class="field full"><span>cover image — url or upload</span>
-            <span class="upload"><input id="e_img" placeholder="https://…"><button type="button" class="btn" data-up="img">upload</button></span>
-            <img class="thumb" id="thumb_img" alt="" hidden>
-          </label>
-          <label class="field full"><span>second image — url or upload</span>
-            <span class="upload"><input id="e_img2" placeholder="https://…"><button type="button" class="btn" data-up="img2">upload</button></span>
-            <img class="thumb" id="thumb_img2" alt="" hidden>
-          </label>
+          <div class="field full">
+  <span>gallery — screenshots (first image = card cover)</span>
+  <div class="gal-tools">
+    <button type="button" class="btn btn-acc" id="galAdd">+ upload images</button>
+    <span class="gal-hint">jpg / png / webp · up to 8 MB each · unlimited · published to the live site when you press “save → live”</span>
+  </div>
+  <div class="gal-grid" id="galGrid"></div>
+</div>
           <label class="field full"><span>image seed (picsum fallback if no url)</span><input id="e_seed" placeholder="auto from id"></label>
+          <label class="field full"><span>live demo url — leave empty if the project has none</span><input id="e_live" placeholder="https://…"></label>
         </div>
 
         <p class="ed-sec">english content</p>
@@ -139,7 +140,7 @@
 
 <div class="toast" id="toast" role="status"></div>
 <input type="file" id="restoreFile" accept=".json,application/json" hidden>
-<input type="file" id="imgFile" accept="image/*" hidden>
+<input type="file" id="imgFile" accept="image/*" multiple hidden>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="data.js"></script>
