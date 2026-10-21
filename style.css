@@ -166,6 +166,9 @@ body.menu-open .mm-link:nth-child(4){transition-delay:.36s}
 .btn-acc{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
 .btn-acc:hover{filter:brightness(1.08);transform:translateY(-2px)}
 .btn-ghost:hover{border-color:var(--acc);color:var(--acc)}
+.btn-pdf svg{color:var(--acc)}
+.btn-pdf:hover svg{transform:translateY(2px)}
+.btn:disabled{opacity:.5;pointer-events:none}
 .info-table{border-top:1px solid var(--line)}
 .info-row{
   display:flex;justify-content:space-between;align-items:center;gap:1.5rem;

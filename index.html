@@ -48,7 +48,7 @@ try{
     <a class="mm-link" href="#contact"><span class="mono">04</span><span data-i18n="navContact">contact</span></a>
   </nav>
   <div class="mmenu-foot">
-    <a class="mono" href="mailto:hello@marwanmahrous.dev" dir="ltr">hello@marwanmahrous.dev</a>
+    <a class="mono" href="mailto:Marwan.moh.mahrous@gmail.com" dir="ltr">Marwan.moh.mahrous@gmail.com</a>
     <div style="display:flex;gap:1.4rem;flex-wrap:wrap;align-items:center">
       <a class="mono" href="https://github.com/marwanmahrous" target="_blank" rel="noopener">GitHub</a>
       <a class="mono" href="https://www.linkedin.com/in/marwanmahrous" target="_blank" rel="noopener">LinkedIn</a>
@@ -74,6 +74,10 @@ try{
         <div class="hero-ctas">
           <a class="btn btn-acc" href="#work"><span data-i18n="heroCta">view work</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg></a>
           <a class="btn btn-ghost" href="#contact"><span data-i18n="heroCta2">get in touch</span></a>
+          <button type="button" class="btn btn-ghost btn-pdf" id="pdfBtn" aria-label="Download portfolio as PDF">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0 0 4-4m-4 4-4-4M4 19h16"/></svg>
+            <span data-i18n="pdfCta">download portfolio</span>
+          </button>
         </div>
       </div>
       <div class="info-table" id="infoTable"></div>
@@ -136,7 +140,7 @@ try{
     <h2 class="sec-title" data-reveal data-i18n-html="contactTitleHtml">let&rsquo;s build <span class="o">together</span></h2>
 
     <div class="mail-row" data-reveal>
-      <a class="mail-link" href="mailto:hello@marwanmahrous.dev" dir="ltr">hello@marwanmahrous.dev
+      <a class="mail-link" href="mailto:Marwan.moh.mahrous@gmail.com" dir="ltr">Marwan.moh.mahrous@gmail.com
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>
       </a>
       <button class="copy-btn" id="copyEmail" aria-label="Copy email">
@@ -238,6 +242,7 @@ try{
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="data.js" defer></script>
 <script src="app.js" defer></script>
+<script src="portfolio-pdf.js" defer></script>
 <script src="admin.js" defer></script>
 </body>
 </html>

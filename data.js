@@ -69,7 +69,10 @@ window.MMM = {
       mType: 'type', mYear: 'year', mRole: 'role', mStack: 'stack',
       mNext: 'next project', mDemo: 'live demo',
       lbHint: 'scroll — full image, never cropped',
-      toast: 'email copied — talk soon.'
+      toast: 'email copied — talk soon.',
+      pdfCta: 'download portfolio', pdfBusy: 'generating pdf…',
+      pdfDone: 'portfolio pdf downloaded — talk soon.',
+      pdfError: 'couldn’t generate the pdf — please try again.'
     },
     ar: {
       docTitle: 'مروان م. مهروس — مهندس برمجيات',
@@ -110,9 +113,19 @@ window.MMM = {
       mType: 'النوع', mYear: 'السنة', mRole: 'الدور', mStack: 'التقنيات',
       mNext: 'المشروع التالي', mDemo: 'زيارة النسخة الحية',
       lbHint: 'مرّر لأسفل — الصورة كاملة بلا اقتصاص',
-      toast: 'تم نسخ البريد — أراك قريبًا.'
+      toast: 'تم نسخ البريد — أراك قريبًا.',
+      pdfCta: 'تحميل البورتفوليو', pdfBusy: 'جارٍ إنشاء ملف PDF…',
+      pdfDone: 'تم تنزيل ملف البورتفوليو بنجاح.',
+      pdfError: 'تعذّر إنشاء ملف PDF — حاول مرة أخرى.'
     }
   },
+
+  /* ---------- Social profiles (contact section + PDF export) ---------- */
+  SOCIALS: [
+    { label: 'GitHub',   url: 'https://github.com/marwanmahrous' },
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/in/marwanmahrous' },
+    { label: 'X',        url: 'https://x.com/marwanmahrous' }
+  ],
 
   /* ---------- Default projects ----------
      Fields: id (unique slug), title, titleAr (optional), year,
