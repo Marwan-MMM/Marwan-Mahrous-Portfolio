@@ -67,7 +67,8 @@ window.MMM = {
       credit: 'designed & coded by me',
       top: 'top', close: 'close', avail: 'open to work',
       mType: 'type', mYear: 'year', mRole: 'role', mStack: 'stack',
-      mNext: 'next project',
+      mNext: 'next project', mDemo: 'live demo',
+      lbHint: 'scroll — full image, never cropped',
       toast: 'email copied — talk soon.'
     },
     ar: {
@@ -107,7 +108,8 @@ window.MMM = {
       credit: 'التصميم والبرمجة — بنفسي',
       top: 'للأعلى', close: 'إغلاق', avail: 'متاح للعمل',
       mType: 'النوع', mYear: 'السنة', mRole: 'الدور', mStack: 'التقنيات',
-      mNext: 'المشروع التالي',
+      mNext: 'المشروع التالي', mDemo: 'زيارة النسخة الحية',
+      lbHint: 'مرّر لأسفل — الصورة كاملة بلا اقتصاص',
       toast: 'تم نسخ البريد — أراك قريبًا.'
     }
   },

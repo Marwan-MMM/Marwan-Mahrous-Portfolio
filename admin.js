@@ -12,6 +12,9 @@
   const S = MMM.state;
   let isOpen = false, authed = false, userEmail = '';
   let editingId = null, armedDelete = null, uploadSlot = null;
+  let galleryItems = [];       /* [{url, path, cap}] — path '' for external urls */
+  let pendingRemovePaths = []; /* storage paths removed in the form — deleted after a successful save */
+  const deletingIds = new Set(); /* concurrent-delete guard */
 
   /* ---------- DOM (built once) ---------- */
   const root = document.createElement('div');
@@ -66,8 +69,18 @@
             <div class="a-upload"><input id="f_img" placeholder="https://…"><button class="a-btn" type="button" data-up="img">upload</button></div></div>
           <div class="a-field full"><label>second image — url or upload</label>
             <div class="a-upload"><input id="f_img2" placeholder="https://…"><button class="a-btn" type="button" data-up="img2">upload</button></div></div>
+          <div class="a-field full"><label>live demo url — optional (the button is hidden when empty)</label>
+            <input id="f_demo" placeholder="https://your-live-demo.example.com"></div>
           <div class="a-field full"><label>image seed (placeholder fallback)</label><input id="f_seed" placeholder="auto from id"></div>
         </div>
+        <p class="a-sec">gallery — extra screenshots (full-page ok)</p>
+        <div class="a-gal" id="aGal"></div>
+        <div class="a-gal-add">
+          <input id="f_gal_url" placeholder="https://… paste an image url">
+          <button class="a-btn" type="button" id="aGalAdd">+ url</button>
+          <button class="a-btn" type="button" id="aGalUpload">upload images…</button>
+        </div>
+        <p class="a-note" style="margin-bottom:.6rem">Gallery images appear in the project window after the second image. Full-page screenshots are shown uncropped, top to bottom.</p>
         <p class="a-sec">english content</p>
         <div class="a-grid">
           <div class="a-field full"><label>category</label><input id="f_en_cat" placeholder="Web App — Full-stack"></div>
@@ -91,6 +104,7 @@
         </div>
       </div>
       <div class="a-ffoot">
+        <button class="a-btn a-btn-preview" id="aPreview">preview ↗</button>
         <button class="a-btn a-btn-acc" id="aSave">save project</button>
         <button class="a-btn" id="aCancel2">cancel</button>
       </div>
@@ -98,9 +112,13 @@
 
     <input type="file" id="aFile" accept=".json,application/json" style="display:none">
     <input type="file" id="aImgFile" accept="image/*" style="display:none">
+    <input type="file" id="aGalFile" accept="image/*" multiple style="display:none">
   `;
   document.body.appendChild(root);
-  const $ = id => root.querySelector(id);
+  /* accepts both 'aLogin' and '#f_id' — without the '#', querySelector
+     searches for a TAG name and returns null, which used to crash the
+     whole panel at startup ("Cannot read properties of null") */
+  const $ = id => root.querySelector(id.startsWith('#') ? id : '#' + id);
 
   /* ---------- auth ---------- */
   async function ensureSession(){
@@ -179,17 +197,115 @@
       if (error) throw error;
       p.hidden = !p.hidden;
       MMM.cacheAndRender(); renderList();
-      MMM.showToast(p.hidden ? 'project hidden — live' : 'project visible — live');
+      MMM.showToast(p.hidden ? 'unpublished — hidden from visitors' : 'published — live for visitors');
     } catch (e) { MMM.showToast('db error: ' + (e.message || '')); }
   }
-  async function deleteProject(id){
+
+  /* ---------- storage cleanup helpers ----------
+     Storage and PostgreSQL cannot share a transaction, so deletion runs
+     DATABASE-FIRST (the old bug was: files gone, row still live) and file
+     cleanup happens afterwards. Any file that fails to be removed is queued
+     in localStorage and retried on the next admin sign-in — no orphans are
+     ever lost track of. Paths always come from the project record itself. */
+  const CLEAN_KEY = 'mmm.storage.cleanup.v1';
+
+  function mediaPathFromUrl(u){
+    if (!u) return '';
+    const m = String(u).match(/\/storage\/v1\/object\/(?:public|authenticated)\/media\/([^?#]+)/);
+    if (!m) return '';
+    let p;
+    try { p = decodeURIComponent(m[1]); } catch (e) { p = m[1]; }
+    /* trust check: only paths inside our own bucket, never arbitrary input */
+    if (!p || p.startsWith('/') || p.includes('..')) return '';
+    return p;
+  }
+  function storagePathsFromRow(row){
+    const paths = new Set();
+    const addUrl = u => { const p = mediaPathFromUrl(u); if (p) paths.add(p); };
+    addUrl(row.img); addUrl(row.img2);
+    (Array.isArray(row.gallery) ? row.gallery : []).forEach(g => {
+      if (!g) return;
+      if (g.path) {
+        const safe = !String(g.path).startsWith('/') && !String(g.path).includes('..');
+        if (safe) paths.add(g.path);
+      }
+      addUrl(g.url);
+    });
+    return [...paths];
+  }
+  function queueCleanup(paths){
+    if (!paths.length) return;
     try {
-      const { error } = await MMM.sb.from('projects').delete().eq('id', id);
+      const cur = JSON.parse(localStorage.getItem(CLEAN_KEY) || '[]');
+      localStorage.setItem(CLEAN_KEY, JSON.stringify([...new Set([...cur, ...paths])]));
+    } catch (e) {}
+  }
+  async function cleanupStorageFiles(paths){
+    if (!paths.length || !MMM.sb) return;
+    try {
+      const { error } = await MMM.sb.storage.from('media').remove(paths);
       if (error) throw error;
+    } catch (e) {
+      queueCleanup(paths); /* retried automatically on the next admin sign-in */
+      MMM.showToast('warning: some storage files could not be removed — retry is automatic');
+      console.warn('[mmm] storage cleanup failed:', e);
+    }
+  }
+  async function flushPendingCleanup(){
+    if (!MMM.sb) return;
+    let q = [];
+    try { q = JSON.parse(localStorage.getItem(CLEAN_KEY) || '[]'); } catch (e) {}
+    if (!Array.isArray(q) || !q.length) return;
+    try {
+      const { error } = await MMM.sb.storage.from('media').remove(q);
+      if (error) throw error;
+      localStorage.setItem(CLEAN_KEY, '[]');
+      MMM.showToast('cleaned ' + q.length + ' leftover file(s) from storage');
+    } catch (e) { /* keep the queue — retried next sign-in */ }
+  }
+
+  async function deleteProject(id){
+    if (deletingIds.has(id)) return; /* prevents concurrent duplicate deletes */
+    deletingIds.add(id);
+    try {
+      /* 1. load the row first — storage paths must come from the trusted
+            record, never from client-supplied arbitrary paths */
+      const { data: rows, error: eFetch } = await MMM.sb.from('projects')
+        .select('*').eq('id', id);
+      if (eFetch) throw eFetch;
+
+      if (!rows || !rows.length) {
+        /* already gone — deletion is idempotent / double-click safe */
+        S.projects = S.projects.filter(x => x.id !== id);
+        MMM.cacheAndRender(); renderList();
+        MMM.showToast('project already deleted');
+        return;
+      }
+      const row = rows[0];
+      const paths = storagePathsFromRow(row);
+
+      /* 2. delete the DATABASE ROW first — and VERIFY it really happened.
+            Without a DELETE policy in RLS, supabase-js returns NO error but
+            deletes 0 rows and the project would silently stay public. */
+      const { data: delRows, error: eDel } = await MMM.sb.from('projects')
+        .delete().eq('id', id).select('id');
+      if (eDel) throw eDel;
+      if (!delRows || delRows.length === 0) {
+        throw new Error('the database refused the delete (0 rows affected) — run supabase-setup.sql to install the admin DELETE policy');
+      }
+
+      /* 3. refresh admin state + public site immediately */
       S.projects = S.projects.filter(x => x.id !== id);
       MMM.cacheAndRender(); renderList();
       MMM.showToast('project deleted — live');
-    } catch (e) { MMM.showToast('db error: ' + (e.message || '')); }
+
+      /* 4. then remove this project's files from storage (retryable) */
+      await cleanupStorageFiles(paths);
+    } catch (e) {
+      MMM.showToast('delete failed: ' + (e.message || 'unknown error'));
+    } finally {
+      deletingIds.delete(id);
+    }
   }
   async function move(id, dir){
     const i = S.projects.findIndex(x => x.id === id);
@@ -210,6 +326,12 @@
     v('#f_id', p && p.id); v('#f_title', p && p.title); v('#f_titleAr', p && p.titleAr);
     v('#f_year', p ? p.year : new Date().getFullYear());
     v('#f_seed', p && p.seed); v('#f_img', p && p.img); v('#f_img2', p && p.img2);
+    v('#f_demo', p && p.demoUrl);
+    galleryItems = (p && Array.isArray(p.gallery))
+      ? p.gallery.map(g => ({ url: g.url || '', path: g.path || '', cap: g.cap || '' }))
+      : [];
+    pendingRemovePaths = [];
+    renderGal();
     const en = (p && p.en) || {}, ar = (p && p.ar) || {};
     ['cat','type','role','stack','short','p1','p2'].forEach(k => {
       v('#f_en_' + k, en[k]); v('#f_ar_' + k, ar[k]);
@@ -217,7 +339,10 @@
     $('aForm').classList.add('open');
     $('aForm').querySelector('input').focus();
   }
-  function closeForm(){ $('aForm').classList.remove('open'); editingId = null; }
+  function closeForm(){
+    $('aForm').classList.remove('open'); editingId = null;
+    galleryItems = []; pendingRemovePaths = [];
+  }
   function slugify(s){
     return String(s).toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'project';
   }
@@ -229,15 +354,17 @@
     });
     return o;
   }
-  async function saveForm(){
+  /* the form is the single source of truth — used by BOTH save and preview,
+     so the preview always matches what will be saved, unsaved edits included */
+  function collectFormProject(){
     const title = $('#f_title').value.trim();
-    if (!title) { MMM.showToast('title is required'); return; }
+    if (!title) { MMM.showToast('title is required'); return null; }
     const id = slugify($('f_id').value || title);
     if (S.projects.some(p => p.id === id && p.id !== editingId)) {
-      MMM.showToast('id already used — pick another'); return;
+      MMM.showToast('id already used — pick another'); return null;
     }
-    const ar = grab('#f_ar_');
     const cur = editingId ? S.projects.find(p => p.id === editingId) : null;
+    const ar = grab('#f_ar_');
     const proj = {
       id, title,
       titleAr: $('f_titleAr').value.trim(),
@@ -245,17 +372,29 @@
       seed: $('f_seed').value.trim() || id,
       img:  $('f_img').value.trim(),
       img2: $('f_img2').value.trim(),
-      live_url: (cur && cur.live_url) || '',
-      hidden: false,
+      demoUrl: $('f_demo').value.trim(),
+      gallery: galleryItems.filter(g => g.url),
+      /* publication state is not a form field:
+         new projects start as drafts — publishing is an explicit action */
+      hidden: cur ? cur.hidden : true,
       en: grab('#f_en_')
     };
     if (Object.keys(ar).length) proj.ar = ar;
-    /* keep the full gallery intact — the two fields here map to slots 0 and 1 */
-    proj.images = MMM.setGallerySlots(cur ? cur.images : [], proj.img, proj.img2);
+    return proj;
+  }
+  async function flushRemovedGalleryFiles(){
+    if (!pendingRemovePaths.length) return;
+    const paths = pendingRemovePaths.slice();
+    pendingRemovePaths = [];
+    await cleanupStorageFiles(paths); /* queues anything that fails */
+  }
+  async function saveForm(){
+    const proj = collectFormProject();
+    if (!proj) return;
 
     try {
       if (editingId) {
-        proj.hidden = cur ? cur.hidden : false;
+        const cur = S.projects.find(p => p.id === editingId);
         const { error } = await MMM.sb.from('projects')
           .update(MMM.projectToRow(proj, cur ? cur.sort_order : 0))
           .eq('id', editingId);
@@ -269,23 +408,31 @@
         if (error) throw error;
         proj.sort_order = next;
         S.projects.push(proj);
-        MMM.showToast('project added — live');
+        MMM.showToast('draft saved — press “publish” in the list to make it public');
       }
+      /* storage files of gallery items removed in this edit session are only
+         deleted AFTER the save succeeded — cancelling never loses files */
+      await flushRemovedGalleryFiles();
       closeForm();
       MMM.cacheAndRender(); renderList();
-    } catch (e) { MMM.showToast('db error: ' + (e.message || 'save failed')); }
+    } catch (e) {
+      MMM.showToast('db error: ' + (e.message || 'save failed'));
+    }
   }
 
-  /* ---------- image uploads (supabase storage) ---------- */
+  /* ---------- image uploads (supabase storage) ----------
+     Returns { url, path } so callers can remember the storage path for
+     later cleanup when the image is removed again. */
   async function uploadImage(file, slot){
     const base = slugify($('f_id').value) || 'untitled';
-    const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
-    const path = `projects/${base}-${slot}-${Date.now()}.${ext}`;
+    const ext = ((file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '')) || 'jpg';
+    const unique = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    const path = `projects/${base}-${slot}-${unique}.${ext}`;
     const { error } = await MMM.sb.storage.from('media')
-      .upload(path, file, { upsert: true, cacheControl: '3600' });
+      .upload(path, file, { upsert: false, cacheControl: '3600' });
     if (error) throw error;
     const { data } = MMM.sb.storage.from('media').getPublicUrl(path);
-    return data.publicUrl;
+    return { url: data.publicUrl, path };
   }
   root.querySelectorAll('[data-up]').forEach(btn =>
     btn.addEventListener('click', () => {
@@ -298,13 +445,84 @@
     e.target.value = '';
     if (!file || !uploadSlot) return;
     if (!file.type.startsWith('image/')) { MMM.showToast('pick an image file'); return; }
-    if (file.size > 8 * 1024 * 1024) { MMM.showToast('image too large (max 8 MB)'); return; }
+    if (file.size > 15 * 1024 * 1024) { MMM.showToast('image too large (max 15 MB)'); return; }
     MMM.showToast('uploading…');
     try {
-      const url = await uploadImage(file, uploadSlot);
-      $('f_' + uploadSlot).value = url;
+      const res = await uploadImage(file, uploadSlot);
+      $('f_' + uploadSlot).value = res.url;
       MMM.showToast('image uploaded — url filled in');
     } catch (err) { MMM.showToast('upload failed: ' + (err.message || '')); }
+  });
+
+  /* ---------- gallery manager — extra screenshots, no fixed limit ---------- */
+  function renderGal(){
+    const box = $('aGal');
+    if (!galleryItems.length){
+      box.innerHTML = '<p class="a-note">no gallery images yet — full-page screenshots are welcome.</p>';
+      return;
+    }
+    box.innerHTML = galleryItems.map((g, i) => `
+      <div class="a-gal-row">
+        <img class="a-gal-thumb" src="${g.url}" alt="" loading="lazy">
+        <input class="a-gal-cap" data-gcap="${i}" placeholder="caption (optional)" value="${String(g.cap || '').replace(/"/g, '&quot;')}">
+        <div class="a-gal-acts">
+          <button class="a-btn" type="button" data-g="up" data-i="${i}" title="move up">↑</button>
+          <button class="a-btn" type="button" data-g="down" data-i="${i}" title="move down">↓</button>
+          <button class="a-btn a-btn-danger" type="button" data-g="rm" data-i="${i}" title="remove">✕</button>
+        </div>
+      </div>`).join('');
+  }
+  $('aGal').addEventListener('click', e => {
+    const btn = e.target.closest('[data-g]');
+    if (!btn) return;
+    const i = +btn.dataset.i;
+    if (btn.dataset.g === 'up' && i > 0) {
+      [galleryItems[i - 1], galleryItems[i]] = [galleryItems[i], galleryItems[i - 1]];
+    } else if (btn.dataset.g === 'down' && i < galleryItems.length - 1) {
+      [galleryItems[i + 1], galleryItems[i]] = [galleryItems[i], galleryItems[i + 1]];
+    } else if (btn.dataset.g === 'rm') {
+      const [gone] = galleryItems.splice(i, 1);
+      /* uploaded file is removed from storage only after a successful save */
+      if (gone && gone.path) pendingRemovePaths.push(gone.path);
+    }
+    renderGal();
+  });
+  $('aGal').addEventListener('input', e => {
+    const inp = e.target.closest('[data-gcap]');
+    if (inp && galleryItems[+inp.dataset.gcap]) galleryItems[+inp.dataset.gcap].cap = inp.value;
+  });
+  $('aGalAdd').addEventListener('click', () => {
+    const url = $('f_gal_url').value.trim();
+    if (!url) { MMM.showToast('paste an image url first'); return; }
+    galleryItems.push({ url, path: '', cap: '' });
+    $('f_gal_url').value = '';
+    renderGal();
+  });
+  $('aGalUpload').addEventListener('click', () => {
+    if (!MMM.sb) { MMM.showToast('supabase not configured'); return; }
+    $('aGalFile').click();
+  });
+  $('aGalFile').addEventListener('change', async e => {
+    const files = [...e.target.files];
+    e.target.value = '';
+    if (!files.length || !MMM.sb) return;
+    const tooBig = files.filter(f => f.size > 15 * 1024 * 1024);
+    const ok = files.filter(f => f.type.startsWith('image/') && f.size <= 15 * 1024 * 1024);
+    if (tooBig.length) MMM.showToast(tooBig.length + ' file(s) skipped — larger than 15 MB');
+    if (!ok.length) return;
+    $('aGalUpload').classList.add('a-uploading');
+    let done = 0, failed = 0;
+    for (const file of ok) {
+      try {
+        MMM.showToast(`uploading gallery ${done + failed + 1}/${ok.length}…`);
+        const res = await uploadImage(file, 'g');
+        galleryItems.push({ url: res.url, path: res.path, cap: '' });
+        done++;
+      } catch (err) { failed++; console.warn('[mmm] gallery upload failed:', err); }
+    }
+    $('aGalUpload').classList.remove('a-uploading');
+    renderGal();
+    MMM.showToast(failed ? `gallery: ${done} uploaded, ${failed} failed` : `gallery: ${done} image(s) uploaded`);
   });
 
   /* ---------- backup / restore ---------- */
@@ -327,7 +545,20 @@
         const incoming = j.projects;
         const keep = new Set(incoming.map(p => p.id));
         const stale = S.projects.map(p => p.id).filter(id => !keep.has(id));
-        if (stale.length) await MMM.sb.from('projects').delete().in('id', stale);
+        if (stale.length) {
+          /* collect storage paths from the DB records themselves, delete the
+             rows first, verify, then clean up their files (same safe order
+             as deleteProject) */
+          const { data: staleRows } = await MMM.sb.from('projects')
+            .select('*').in('id', stale);
+          const { data: delRows, error: eDel } = await MMM.sb.from('projects')
+            .delete().in('id', stale).select('id');
+          if (eDel) throw eDel;
+          if (delRows && delRows.length) {
+            const gone = (staleRows || []).filter(r => delRows.some(d => d.id === r.id));
+            await cleanupStorageFiles(gone.flatMap(storagePathsFromRow));
+          }
+        }
         const { error } = await MMM.sb.from('projects')
           .upsert(incoming.map((p, i) => MMM.projectToRow(p, i)), { onConflict: 'id' });
         if (error) throw error;
@@ -360,7 +591,7 @@
           <button class="a-btn" data-act="up"    data-id="${p.id}" title="move up">↑</button>
           <button class="a-btn" data-act="down"  data-id="${p.id}" title="move down">↓</button>
           <button class="a-btn" data-act="edit"  data-id="${p.id}">edit</button>
-          <button class="a-btn" data-act="toggle" data-id="${p.id}">${p.hidden ? 'show' : 'hide'}</button>
+          <button class="a-btn" data-act="toggle" data-id="${p.id}">${p.hidden ? 'publish' : 'unpublish'}</button>
           <button class="a-btn a-btn-danger${armedDelete === p.id ? ' arm' : ''}" data-act="del" data-id="${p.id}">${armedDelete === p.id ? 'sure?' : 'delete'}</button>
         </div>
       </div>`).join('');
@@ -392,7 +623,10 @@
     $('aErr').textContent = '';
     await ensureSession();
     syncUI();
-    if (authed) refreshFromDb(true);
+    if (authed) {
+      refreshFromDb(true);
+      flushPendingCleanup(); /* retry any storage files left from a failed delete */
+    }
   }
   function closeAdmin(){
     if (!isOpen) return;
@@ -407,6 +641,28 @@
   const menuOpenState  = () => document.body.classList.contains('menu-open');
   MMM.admin = { open: openAdmin, close: closeAdmin, get isOpen(){ return isOpen; }, renderList };
 
+  /* ---------- preview — real public modal, in-memory, never publishes ----------
+   * The form is the source of truth (unsaved edits included). The admin panel
+   * hides while the REAL project modal renders the project; closing the modal
+   * restores the editor exactly as it was. No DB write, no state change. */
+  let previewReturn = false;
+  function previewForm(){
+    const proj = collectFormProject();
+    if (!proj) return;
+    previewReturn = true;
+    MMM.onPreviewClosed = () => {
+      MMM.onPreviewClosed = null;
+      if (!previewReturn) return;
+      previewReturn = false;
+      root.style.display = '';
+      isOpen = true;
+      MMM.lockScroll(true); /* the modal close released it — re-lock for the panel */
+    };
+    root.style.display = 'none'; /* let the real site modal take the stage */
+    isOpen = false;              /* lets app.js handle Escape → close modal  */
+    MMM.openProjectPreview(proj);
+  }
+
   /* ---------- wiring ---------- */
   $('aLogin').addEventListener('click', signIn);
   $('aPass').addEventListener('keydown', e => { if (e.key === 'Enter') signIn(); });
@@ -416,6 +672,7 @@
   $('aFormClose').addEventListener('click', closeForm);
   $('aCancel2').addEventListener('click', closeForm);
   $('aSave').addEventListener('click', saveForm);
+  $('aPreview').addEventListener('click', previewForm);
   $('aSeed').addEventListener('click', seedDefaults);
   $('aExport').addEventListener('click', exportJSON);
   $('aImportBtn').addEventListener('click', () => $('aFile').click());

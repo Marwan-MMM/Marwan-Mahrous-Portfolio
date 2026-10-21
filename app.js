@@ -17,6 +17,7 @@ let menuOpen = false, modalOpen = false, swapping = false, lenis = null, current
 
 const ARROW = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 17 17 7M9 7h8v8"/></svg>';
 const PLUS  = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const arNum = s => String(s).replace(/[0-9]/g, d => '٠١٢٣٤٥٦٧٨٩'[d]);
 const pTitle = p => (MMM.state.lang === 'ar' && p.titleAr) ? p.titleAr : p.title;
 const pic = (seed, w, h) => `https://picsum.photos/seed/${seed}/${w}/${h}.jpg`;
@@ -43,54 +44,24 @@ function initSupabase(){
 }
 MMM.sb = initSupabase();
 
-
-/* row <-> project mappers (DB columns are snake_case).
-   `images` is the canonical gallery: [{ url, caption }, ...] — unlimited.
-   img / img2 remain as derived columns: img = images[0], img2 = images[1].
-   Old rows that only have img/img2 are merged on read — no migration needed. */
-MMM.rowToProject = r => {
-  const images = (Array.isArray(r.images) ? r.images : []).filter(x => x && x.url)
-    .map(x => ({ url: x.url, caption: x.caption || '' }));
-  const seen = new Set(images.map(x => x.url));
-  [r.img, r.img2].forEach(u => {
-    if (u && !seen.has(u)){ images.push({ url: u, caption: '' }); seen.add(u); }
-  });
-  return {
-    id: r.id, title: r.title, titleAr: r.title_ar || '',
-    year: r.year || '', seed: r.seed || r.id, img: r.img || '', img2: r.img2 || '',
-    live_url: r.live_url || '', images,
-    hidden: !!r.hidden, sort_order: r.sort_order || 0,
-    en: r.en || {}, ar: r.ar || {}
-  };
-};
-MMM.projectToRow = (p, sortOrder) => {
-  const images = (Array.isArray(p.images) ? p.images : []).filter(x => x && x.url)
-    .map(x => ({ url: x.url, caption: x.caption || '' }));
-  return {
-    id: p.id, title: p.title, title_ar: p.titleAr || '',
-    year: String(p.year || ''), seed: p.seed || p.id,
-    img: images[0] ? images[0].url : '', img2: images[1] ? images[1].url : '',
-    live_url: p.live_url || '', images,
-    hidden: !!p.hidden, sort_order: sortOrder || 0,
-    en: p.en || {}, ar: p.ar || {}
-  };
-};
-/* The overlay admin's two URL fields ("cover" / "second") map to gallery
-   positions 0 and 1 without touching the rest of the gallery. */
-MMM.setGallerySlots = (images, img, img2) => {
-  const arr = (Array.isArray(images) ? images : []).map(x => ({ url: x.url, caption: x.caption || '' }));
-  const setSlot = (i, u) => {
-    if (u){
-      if (arr[i]) arr[i] = { url: u, caption: arr[i].caption };
-      else arr.splice(i, 0, { url: u, caption: '' });
-    }else if (arr[i]){
-      arr.splice(i, 1);
-    }
-  };
-  setSlot(0, (img || '').trim());
-  setSlot(1, (img2 || '').trim());
-  return arr;
-};
+/* row <-> project mappers (DB columns are snake_case) */
+MMM.rowToProject = r => ({
+  id: r.id, title: r.title, titleAr: r.title_ar || '',
+  year: r.year || '', seed: r.seed || r.id, img: r.img || '', img2: r.img2 || '',
+  demoUrl: r.demo_url || '',
+  gallery: Array.isArray(r.gallery) ? r.gallery : [],
+  hidden: !!r.hidden, sort_order: r.sort_order || 0,
+  en: r.en || {}, ar: r.ar || {}
+});
+MMM.projectToRow = (p, sortOrder) => ({
+  id: p.id, title: p.title, title_ar: p.titleAr || '',
+  year: String(p.year || ''), seed: p.seed || p.id,
+  img: p.img || '', img2: p.img2 || '',
+  demo_url: p.demoUrl || '',
+  gallery: Array.isArray(p.gallery) ? p.gallery : [],
+  hidden: !!p.hidden, sort_order: sortOrder || 0,
+  en: p.en || {}, ar: p.ar || {}
+});
 
 /* ================= project data pipeline =================
    1. Supabase (live database — source of truth for everyone)
@@ -99,8 +70,11 @@ MMM.setGallerySlots = (images, img, img2) => {
 async function fetchFromSupabase(){
   if (!MMM.sb) return null;
   try {
+    /* public site: only rows that are not hidden. RLS enforces this
+       server-side as well — this filter is defense in depth. */
     const { data, error } = await MMM.sb
-      .from('projects').select('*').order('sort_order', { ascending: true });
+      .from('projects').select('*').eq('hidden', false)
+      .order('sort_order', { ascending: true });
     if (error) throw error;
     return (data || []).map(MMM.rowToProject);
   } catch (e) {
@@ -118,8 +92,12 @@ function persistCache(){
 async function loadProjects(){
   let list = null, source = 'defaults';
   list = await fetchFromSupabase();
-  if (list && list.length) source = 'supabase';
-  else {
+  if (list) {
+    /* the database answered — it is the single source of truth, even when
+       it returns ZERO rows. Falling back to the localStorage snapshot here
+       is what kept deleted projects visible on the public site. */
+    source = 'supabase';
+  } else {
     try {
       const j = JSON.parse(localStorage.getItem(MMM.KEYS.cache) || 'null');
       if (j && Array.isArray(j.projects) && j.projects.length) { list = j.projects; source = 'cache'; }
@@ -155,7 +133,7 @@ function renderMarquee(){
 
 function renderWork(){
   const t = MMM.I18N[MMM.state.lang];
-  MMM.state.view = MMM.state.projects.filter(p => !p.hidden);
+  MMM.state.view = MMM.state.projects.filter(p => p && !p.hidden);
   qs('#workGrid').innerHTML = MMM.state.view.map((p, i) => {
     const d = projLoc(p);
     const chips = (d.stack || '').split('·').map(s => s.trim()).filter(Boolean).slice(0, 4)
@@ -163,13 +141,13 @@ function renderWork(){
     return `<article class="card" data-index="${i}" tabindex="0" role="button" aria-label="${p.title}">
       <div class="card-top"><span>${String(i + 1).padStart(2, '0')} — ${p.id}</span>
         <span class="st"><span class="dot"></span>${p.year} · ${t.shipped}</span></div>
-      <div class="card-img"><img loading="lazy" src="${p.img || pic(p.seed || p.id, 800, 450)}" alt="${p.title}"></div>
+      <div class="card-img" data-shot="thumb"><img loading="lazy" src="${p.img || pic(p.seed || p.id, 800, 450)}" alt="${esc(p.title)}"></div>
       <div class="card-body">
         <h3 class="card-title"><span>${pTitle(p)}</span>${ARROW}</h3>
         <p class="card-desc">${d.short || ''}</p>
         <div class="card-tags">${chips}</div>
       </div></article>`;
-  }).join('');
+  }).join('') || '<p class="work-empty">no published projects yet — check back soon.</p>';
   initReveals();
 }
 
@@ -344,9 +322,22 @@ async function boot(){
 }
 
 /* ================= project modal ================= */
-const att = s => String(s ?? '').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-function fillModal(i){
-  const p = MMM.state.view[i], d = projLoc(p), n = MMM.state.view.length;
+/* gallery — extra images (full-page screenshots welcome, never cropped) */
+function renderGallery(p){
+  const g = qs('#mGallery');
+  const items = (Array.isArray(p.gallery) ? p.gallery : []).filter(it => it && it.url);
+  if (!items.length){ g.hidden = true; g.innerHTML = ''; return; }
+  g.hidden = false;
+  g.innerHTML = items.map(it => {
+    const cap = it.cap || '';
+    return '<figure data-shot="full"><img loading="lazy" src="' + esc(it.url) + '" alt="' + esc((p.title || '') + ' — screenshot') + '">' +
+      (cap ? '<figcaption>' + esc(cap) + '</figcaption>' : '') + '</figure>';
+  }).join('');
+}
+
+function fillModal(i, override){
+  const p = override || MMM.state.view[i], d = projLoc(p);
+  if (!p) return;
   qs('#mPath').textContent = '~/work/' + p.id;
   qs('#mCat').textContent = '// ' + (d.cat || '');
   qs('#mTitle').textContent = pTitle(p);
@@ -356,29 +347,33 @@ function fillModal(i){
   qs('#mStack').textContent = d.stack || '—';
   qs('#mP1').textContent = d.p1 || '';
   qs('#mP2').textContent = d.p2 || '';
-  /* gallery — every image at its natural aspect ratio; nothing is cropped.
-     Projects with no gallery fall back to one seeded placeholder image. */
-  const shots = (p.images && p.images.length)
-    ? p.images
-    : [{ url: pic(p.seed || p.id, 1400, 900), caption: '' }];
-  qs('#mGallery').innerHTML = shots.map((im, k) => `
-    <figure class="m-shot">
-      <img src="${att(im.url)}" alt="${att(p.title + (im.caption ? ' — ' + im.caption : ''))}"
-           data-cap="${att(im.caption || '')}" ${k ? 'loading="lazy"' : ''}>
-      ${im.caption ? `<figcaption>${att(im.caption)}</figcaption>` : ''}
-    </figure>`).join('');
-  /* live demo — rendered only when the project actually has a URL */
-  const live = qs('#mLive');
-  if (p.live_url){ live.href = p.live_url; live.hidden = false; }
-  else { live.removeAttribute('href'); live.hidden = true; }
-  const np = MMM.state.view[(i + 1) % n];
-  qs('#mNextName').textContent = pTitle(np);
+  const i1 = qs('#mImg1'), i2 = qs('#mImg2');
+  i1.src = p.img  || pic(p.seed || p.id, 1400, 800);        i1.alt = p.title;
+  i2.src = p.img2 || pic((p.seed || p.id) + '-b', 1400, 800); i2.alt = p.title + ' detail';
+  /* live demo button — shown ONLY when a real URL is configured */
+  const demo = qs('#mDemo');
+  if (p.demoUrl) {
+    demo.href = p.demoUrl;
+    demo.hidden = false;
+    qs('#mDemoLabel').textContent = (MMM.I18N[MMM.state.lang] || {}).mDemo || 'live demo';
+  } else {
+    demo.hidden = true;
+    demo.removeAttribute('href');
+  }
+  renderGallery(p);
+  if (!override) {
+    const n = MMM.state.view.length;
+    const np = n ? MMM.state.view[(i + 1) % n] : null;
+    if (np) qs('#mNextName').textContent = pTitle(np);
+  }
 }
-function openModal(i){
-  current = i; fillModal(i);
+function openModal(i, override){
+  current = i; fillModal(i, override);
   modalOpen = true;
   qs('#modal').classList.add('open');
   qs('#modal').setAttribute('aria-hidden', 'false');
+  /* a single previewed project has no "next" sibling */
+  qs('#mNext').style.display = override ? 'none' : '';
   qs('#mScroll').scrollTop = 0;
   MMM.lockScroll(true);
   if (!reduced) gsap.fromTo('.m-win', { y: 26, autoAlpha: 0, scale: .985 },
@@ -387,10 +382,16 @@ function openModal(i){
 function closeModal(){
   if (!modalOpen) return;
   modalOpen = false;
-  const done = () => { qs('#modal').classList.remove('open'); qs('#modal').setAttribute('aria-hidden', 'true'); };
+  const done = () => {
+    qs('#modal').classList.remove('open');
+    qs('#modal').setAttribute('aria-hidden', 'true');
+    qs('#mNext').style.display = '';
+  };
   if (reduced) done();
   else gsap.to('.m-win', { y: 20, autoAlpha: 0, duration: .3, ease: 'power2.in', onComplete: done });
   MMM.lockScroll(false);
+  /* admin preview support — restores the editor after an unsaved-changes preview */
+  if (typeof MMM.onPreviewClosed === 'function') MMM.onPreviewClosed();
 }
 qs('#workGrid').addEventListener('click', e => {
   const card = e.target.closest('.card');
@@ -411,31 +412,36 @@ qs('#mNext').addEventListener('click', () => {
   }});
 });
 
-/* ---------- full-image viewer (lightbox) ---------- */
-function openLightbox(src, cap, alt){
-  const lb = qs('#lightbox');
-  qs('#lbImg').src = src;
-  qs('#lbImg').alt = alt || '';
-  qs('#lbCap').textContent = cap || '';
+/* ================= lightbox — full-image viewer =================
+   Click any image inside the project modal to inspect the complete,
+   uncropped original — including extremely tall full-page screenshots. */
+const lb = qs('#lightbox'), lbImg = qs('#lbImg');
+let lbOpen = false;
+function openLightbox(src, alt){
+  if (!src) return;
+  lbImg.src = src; lbImg.alt = alt || '';
+  lbOpen = true;
   lb.classList.add('open');
   lb.setAttribute('aria-hidden', 'false');
+  qs('#lbScroll').scrollTop = 0;
   MMM.lockScroll(true);
 }
 function closeLightbox(){
-  const lb = qs('#lightbox');
+  if (!lbOpen) return;
+  lbOpen = false;
   lb.classList.remove('open');
   lb.setAttribute('aria-hidden', 'true');
-  MMM.lockScroll(false);
+  lbImg.removeAttribute('src');
+  MMM.lockScroll(false); /* no-op while the modal or menu is still open */
 }
+qs('#mImg1').addEventListener('click', () => openLightbox(qs('#mImg1').src, qs('#mImg1').alt));
+qs('#mImg2').addEventListener('click', () => openLightbox(qs('#mImg2').src, qs('#mImg2').alt));
 qs('#mGallery').addEventListener('click', e => {
   const img = e.target.closest('img');
-  if (!img) return;
-  openLightbox(img.getAttribute('src'), img.dataset.cap || '', img.alt);
+  if (img) openLightbox(img.src, img.alt);
 });
 qs('#lbClose').addEventListener('click', closeLightbox);
-qs('#lightbox').addEventListener('click', e => {
-  if (!e.target.closest('figure')) closeLightbox();
-});
+qs('#lbBackdrop').addEventListener('click', closeLightbox);
 
 /* ================= mobile menu ================= */
 const burger = qs('#burger');
@@ -522,12 +528,16 @@ qs('#copyEmail').addEventListener('click', async () => {
 /* ================= admin hooks ================= */
 MMM.rerenderProjects = () => { renderWork(); updateWorkCount(); ScrollTrigger.refresh(); };
 MMM.reloadProjects = async () => { await loadProjects(); MMM.rerenderProjects(); };
+/* preview — renders a project object through the REAL public modal.
+   Used by the admin panel; purely client-side, never writes to the DB,
+   never changes published/hidden state, works for unsaved form values. */
+MMM.openProjectPreview = p => { closeLightbox(); openModal(0, p); };
 
 /* ================= escape key (admin takes priority) ================= */
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   if (MMM.admin && MMM.admin.isOpen) return; // admin.js handles it
-  if (qs('#lightbox').classList.contains('open')) { closeLightbox(); return; }
+  if (lbOpen) { closeLightbox(); return; }
   if (modalOpen) closeModal();
   else if (menuOpen) toggleMenu(false);
 });

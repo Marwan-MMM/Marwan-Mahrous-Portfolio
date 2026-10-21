@@ -4,146 +4,30 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex, nofollow">
-<title>~/admin — MMM Console</title>
+<title>~/admin — redirecting…</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect width='24' height='24' fill='%230A0B0D'/%3E%3Crect x='6' y='6' width='9' height='12' fill='%23C7F542'/%3E%3C/svg%3E">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="admin.css">
+<style>
+  *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+  :root{--bg:#0A0B0D;--bg2:#0F1113;--txt:#E9EAE4;--dim:rgba(233,234,228,.34);--line:rgba(233,234,228,.13);--acc:#C7F542;--f-mono:'JetBrains Mono',monospace}
+  body{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.6rem;background:var(--bg);color:var(--txt);font-family:'Space Grotesk',sans-serif}
+  .gate-logo{font-family:var(--f-mono);font-size:1.25rem;display:flex;align-items:center;gap:2px}
+  .gate-logo b{color:var(--acc);font-weight:500}
+  .caret{width:.55em;height:1.05em;background:var(--acc);margin-left:5px;animation:blink 1.1s steps(1) infinite}
+  @keyframes blink{50%{opacity:0}}
+  p{font-family:var(--f-mono);font-size:.68rem;color:var(--dim);line-height:1.7;text-align:center;max-width:44ch}
+  a{font-family:var(--f-mono);font-size:.72rem;color:var(--acc);text-decoration:none;border:1px solid var(--line);padding:.6rem 1rem;border-radius:3px;transition:border-color .25s}
+  a:hover{border-color:var(--acc)}
+</style>
+<script>
+/* The admin panel lives INSIDE the site (index.html) — this standalone page
+   used to be a dead, non-functional duplicate. Forward to the real one. */
+setTimeout(function(){ location.replace('index.html#admin'); }, 400);
+</script>
 </head>
 <body>
-
-<!-- ============ SIGN-IN GATE ============ -->
-<div class="gate" id="gate">
-  <div class="gate-card">
-    <div class="gate-logo">~/<b>admin</b><span class="caret"></span></div>
-    <p class="gate-sub" id="gateSub">Sign in with your Supabase admin account.</p>
-    <label>email<input id="gEmail" type="email" autocomplete="username" placeholder="you@example.com"></label>
-    <label>password<input id="gPass" type="password" autocomplete="current-password" placeholder="••••••••"></label>
-    <div class="gate-err" id="gErr"></div>
-    <button class="btn btn-acc btn-block" id="gLogin">sign in →</button>
-    <a class="gate-back" href="index.html">← back to the site</a>
-  </div>
-  <div class="gate-foot">MMM Console v<span id="vNum"></span> — protected by Supabase Auth + RLS</div>
-</div>
-
-<!-- ============ CONSOLE APP ============ -->
-<div class="app" id="app" hidden>
-
-  <!-- top bar -->
-  <header class="topbar">
-    <div class="tb-left">
-      <span class="tb-logo">~/<b>admin</b></span>
-      <span class="tb-dot" id="dbDot"></span>
-      <span class="tb-status" id="dbStatus">connecting…</span>
-    </div>
-    <div class="tb-right">
-      <a class="btn" href="index.html" target="_blank">view site ↗</a>
-      <button class="btn" id="btnSync">reload db</button>
-      <button class="btn" id="btnSignOut">sign out</button>
-    </div>
-  </header>
-
-  <!-- stats strip -->
-  <div class="stats" id="stats"></div>
-
-  <!-- main layout -->
-  <div class="layout">
-
-    <!-- list pane -->
-    <aside class="pane pane-list">
-      <div class="pane-head">
-        <h2>projects</h2>
-        <div class="pane-actions">
-          <button class="btn btn-acc" id="btnAdd">+ new</button>
-          <button class="btn" id="btnSeed" title="Load the 5 starter projects from data.js">seed defaults</button>
-        </div>
-      </div>
-      <input class="search" id="search" type="search" placeholder="filter projects…">
-      <div class="plist" id="plist"></div>
-      <div class="pane-foot">
-        <button class="btn" id="btnBackup">backup json</button>
-        <button class="btn" id="btnRestore">restore json</button>
-      </div>
-    </aside>
-
-    <!-- editor pane -->
-    <section class="pane pane-editor">
-      <div class="ed-empty" id="edEmpty">
-        <p class="ed-empty-line">select a project —<br>or create a new one.</p>
-        <p class="ed-empty-sub">changes go live immediately for all visitors</p>
-      </div>
-
-      <form id="edForm" hidden autocomplete="off">
-        <!-- live preview of the public card -->
-        <div class="pv-label">// live preview — public card</div>
-        <div class="pv-card" id="pvCard">
-          <div class="pv-top"><span id="pv_id">~/work/…</span><span id="pv_year"></span></div>
-          <div class="pv-img"><img id="pv_img" src="" alt=""></div>
-          <div class="pv-body">
-            <h3 id="pv_title">—</h3>
-            <p id="pv_short">—</p>
-            <div class="pv-chips" id="pv_chips"></div>
-          </div>
-        </div>
-
-        <div class="ed-head">
-          <span class="ed-title" id="edHeading">new project</span>
-          <div class="ed-head-actions">
-            <button type="button" class="btn btn-danger" id="eDelete">delete</button>
-            <button type="button" class="btn" id="eCancel">cancel</button>
-            <button type="button" class="btn btn-acc" id="eSave">save → live</button>
-          </div>
-        </div>
-
-        <p class="ed-sec">basics</p>
-        <div class="grid">
-          <label class="field"><span>id / slug *</span><input id="e_id" placeholder="my-project"></label>
-          <label class="field"><span>year</span><input id="e_year" placeholder="2025"></label>
-          <label class="field full"><span>title (english) *</span><input id="e_title"></label>
-          <label class="field full" dir="rtl"><span>العنوان (arabic — اختياري)</span><input id="e_titleAr" dir="rtl"></label>
-          <div class="field full">
-  <span>gallery — screenshots (first image = card cover)</span>
-  <div class="gal-tools">
-    <button type="button" class="btn btn-acc" id="galAdd">+ upload images</button>
-    <span class="gal-hint">jpg / png / webp · up to 8 MB each · unlimited · published to the live site when you press “save → live”</span>
-  </div>
-  <div class="gal-grid" id="galGrid"></div>
-</div>
-          <label class="field full"><span>image seed (picsum fallback if no url)</span><input id="e_seed" placeholder="auto from id"></label>
-          <label class="field full"><span>live demo url — leave empty if the project has none</span><input id="e_live" placeholder="https://…"></label>
-        </div>
-
-        <p class="ed-sec">english content</p>
-        <div class="grid">
-          <label class="field full"><span>category</span><input id="e_en_cat" placeholder="Web App — Full-stack"></label>
-          <label class="field"><span>type</span><input id="e_en_type" placeholder="Client work"></label>
-          <label class="field"><span>role</span><input id="e_en_role" placeholder="Full-stack"></label>
-          <label class="field full"><span>stack (separate with ·)</span><input id="e_en_stack" placeholder="React · Node.js · PostgreSQL"></label>
-          <label class="field full"><span>card short line</span><textarea id="e_en_short" rows="2"></textarea></label>
-          <label class="field full"><span>story — paragraph 1</span><textarea id="e_en_p1" rows="4"></textarea></label>
-          <label class="field full"><span>story — paragraph 2 (results)</span><textarea id="e_en_p2" rows="4"></textarea></label>
-        </div>
-
-        <p class="ed-sec">arabic content — optional (empty = falls back to english)</p>
-        <div class="grid">
-          <label class="field full" dir="rtl"><span>الفئة</span><input id="e_ar_cat" dir="rtl"></label>
-          <label class="field" dir="rtl"><span>النوع</span><input id="e_ar_type" dir="rtl"></label>
-          <label class="field" dir="rtl"><span>الدور</span><input id="e_ar_role" dir="rtl"></label>
-          <label class="field full" dir="rtl"><span>التقنيات</span><input id="e_ar_stack" dir="rtl"></label>
-          <label class="field full" dir="rtl"><span>سطر البطاقة</span><textarea id="e_ar_short" rows="2" dir="rtl"></textarea></label>
-          <label class="field full" dir="rtl"><span>القصة — فقرة ١</span><textarea id="e_ar_p1" rows="4" dir="rtl"></textarea></label>
-          <label class="field full" dir="rtl"><span>القصة — فقرة ٢</span><textarea id="e_ar_p2" rows="4" dir="rtl"></textarea></label>
-        </div>
-      </form>
-    </section>
-  </div>
-</div>
-
-<div class="toast" id="toast" role="status"></div>
-<input type="file" id="restoreFile" accept=".json,application/json" hidden>
-<input type="file" id="imgFile" accept="image/*" multiple hidden>
-
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="data.js"></script>
-<script src="console.js"></script>
+  <div class="gate-logo">~/<b>admin</b><span class="caret"></span></div>
+  <p>The admin console is built into the site. Redirecting you to the sign-in panel…</p>
+  <a href="index.html#admin">open admin now</a>
 </body>
 </html>
