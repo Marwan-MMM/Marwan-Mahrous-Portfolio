@@ -708,7 +708,8 @@
   /* ---------- secret access ---------- */
   let buf = '';
   document.addEventListener('keydown', e => {
-    if (e.key.length !== 1) return;
+    /* e.key can be undefined on synthesized / IME events — guard first */
+    if (!e.key || e.key.length !== 1) return;
     if (/input|textarea|select/i.test(e.target.tagName)) return;
     buf = (buf + e.key.toLowerCase()).slice(-5);
     if (buf === 'admin') { buf = ''; openAdmin(); }

@@ -7,6 +7,9 @@
    • 100% client-side: library (vendor/jspdf.umd.min.js) and brand
      fonts (assets/fonts/*.ttf) are bundled with the site and
      lazy-loaded on first click. No backend, GitHub Pages compatible.
+     If the bundled library copy is missing from a deployment (404 —
+     e.g. the vendor/ folder was never pushed), loading transparently
+     falls back to pinned CDN copies of the SAME jsPDF build (2.5.1).
    • Content source = the SAME pipeline the site renders from:
      MMM.state.projects (live Supabase → localStorage cache → data.js
      defaults) + MMM.I18N / SERVICES / STACK / EDU / EMAIL / SOCIALS.
@@ -53,25 +56,52 @@
     return 'https://picsum.photos/seed/' + seed + '/' + w + '/' + h + '.jpg';
   };
 
-  /* ---------- lazy vendor + font loading ---------- */
+  /* ---------- lazy vendor + font loading ----------
+     Offline-first: the bundled vendor copy is tried before any CDN, so
+     the site keeps working without internet. If it 404s (missing
+     folder in a deployment), the pinned CDN fallbacks below keep the
+     button functional. Sources are tried strictly in order. */
+  var LIB_SOURCES = [
+    'vendor/jspdf.umd.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+    'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'
+  ];
+  function tryScript(src) {
+    return new Promise(function (res, rej) {
+      var s = document.createElement('script');
+      s.src = src;
+      s.onload = function () {
+        if (window.jspdf && window.jspdf.jsPDF) res();
+        else rej(new Error('loaded but jsPDF global missing'));
+      };
+      s.onerror = function () { rej(new Error('unreachable: ' + src)); };
+      document.head.appendChild(s);
+    });
+  }
   var libP = null;
   function loadLib() {
     if (window.jspdf && window.jspdf.jsPDF) return Promise.resolve();
     if (libP) return libP;
-    libP = new Promise(function (res, rej) {
-      var s = document.createElement('script');
-      s.src = 'vendor/jspdf.umd.min.js';
-      s.onload = res;
-      s.onerror = function () { libP = null; rej(new Error('pdf library failed to load')); };
-      document.head.appendChild(s);
+    libP = LIB_SOURCES.reduce(function (chain, src) {
+      return chain.catch(function () {
+        console.warn('[mmm] pdf library source unavailable, trying next:', src);
+        return tryScript(src);
+      });
+    }, Promise.reject()).then(null, function () {
+      libP = null;   /* every source failed — let the next click retry */
+      throw new Error('pdf library failed to load (bundled copy and CDN fallbacks unreachable)');
     });
     return libP;
   }
 
-  var fontsOk = false, fontP = null;
-  function embedFonts(doc) {
-    if (fontP) return fontP;
-    fontP = Promise.all(FONTS.map(function (f) {
+  var fontsOk = false, fontDataP = null;
+  /* font binaries are fetched once and cached as base64 strings;
+     REGISTRATION must happen per-document — every click builds a fresh
+     jsPDF doc, so a cached promise must never skip addFileToVFS/addFont
+     (otherwise the 2nd click would draw with unregistered fonts). */
+  function loadFontData() {
+    if (fontDataP) return fontDataP;
+    fontDataP = Promise.all(FONTS.map(function (f) {
       return fetch(f.file).then(function (r) {
         if (!r.ok) throw new Error('font http ' + r.status);
         return r.arrayBuffer();
@@ -79,12 +109,23 @@
         var bytes = new Uint8Array(buf), bin = '';
         for (var i = 0; i < bytes.length; i += 8192)
           bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 8192));
-        doc.addFileToVFS(f.file, btoa(bin));
-        doc.addFont(f.file, f.family, f.style);
+        return btoa(bin);
       });
-    })).then(function () { fontsOk = true; })
-      .catch(function (e) { console.warn('[mmm] brand fonts unavailable, using core fonts:', e); fontsOk = false; });
-    return fontP;
+    }));
+    return fontDataP;
+  }
+  function embedFonts(doc) {
+    return loadFontData().then(function (list) {
+      list.forEach(function (b64, i) {
+        doc.addFileToVFS(FONTS[i].file, b64);
+        doc.addFont(FONTS[i].file, FONTS[i].family, FONTS[i].style);
+      });
+      fontsOk = true;
+    }).catch(function (e) {
+      console.warn('[mmm] brand fonts unavailable, using core fonts:', e);
+      fontsOk = false;
+      fontDataP = null;   /* allow a fresh fetch on the next click */
+    });
   }
 
   /* ---------- image pipeline (CORS-safe, JPEG, downscaled) ---------- */
@@ -241,6 +282,8 @@
       var doc = new jsPDF({ unit: 'mm', format: 'a4', compress: true });
       return embedFonts(doc).then(function () { return doc; });
     }).then(function (doc) {
+      /* font choice is per-run — never sticky from a previous click */
+      SG = 'SpaceGrotesk'; MONO = 'JetBrainsMono';
       if (!fontsOk) { SG = 'helvetica'; MONO = 'courier'; }
 
       var E = MMM.I18N.en || {};
