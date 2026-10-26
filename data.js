@@ -123,8 +123,8 @@ window.MMM = {
   /* ---------- Social profiles (contact section + PDF export) ---------- */
   SOCIALS: [
     { label: 'GitHub',   url: 'https://github.com/marwanmahrous' },
-    { label: 'LinkedIn', url: 'https://www.linkedin.com/in/marwanmahrous' },
-    { label: 'X',        url: 'https://x.com/marwanmahrous' }
+    { label: 'LinkedIn', url: 'https://www.linkedin.com/in/marwan-mahrous-elsetouhy/' },
+    { label: 'Whatsapp',        url: 'https://wa.me/201111077515' }
   ],
 
   /* ---------- Default projects ----------
