@@ -9,7 +9,7 @@ window.MMM = {
 
   /* ---------- Site config ---------- */
   VERSION: '2.0.0',
-  EMAIL: 'hello@marwanmahrous.dev',
+  EMAIL: 'Marwan.moh.mahrous@gmail.com',
 
   /* ---------- Supabase ----------
      Dashboard → Settings → API:
